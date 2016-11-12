@@ -390,6 +390,7 @@ def dropout_backward(dout, cache):
   return dx
 
 
+
 def conv_forward_naive(x, w, b, conv_param):
   """
   A naive implementation of the forward pass for a convolutional layer.
@@ -418,35 +419,37 @@ def conv_forward_naive(x, w, b, conv_param):
   # TODO: Implement the convolutional forward pass.                           #
   # Hint: you can use the function np.pad for padding.                        #
   #############################################################################
-  N, C, H, W = x.shape
-  print "N, C, H, W", x.shape
+  N, C, HI, WI = x.shape
+  F, C, HF, WF = w.shape
+  S, P = (conv_param['stride'], conv_param['pad'])
+  HP, WP = HI + 2 * P, WI + 2 * P
+  HO, WO = ((HP - HF)/S + 1, (WP - WF)/S + 1) 
 
-  F, C, HH, WW = w.shape
-  print "F, C, HH, WW", w.shape
 
-  P = conv_param['pad']
-  S = conv_param['stride']
-  print "P, S", P, S
+  xpad = np.pad(x, ((0, 0), (0, 0), (P, P), (P, P)), 'constant')
 
-  Hout = 1 + (H + 2 * P - HH) / S
-  Wout = 1 + (W + 2 * P - WW) / S
-  print "Hout, Wout", Hout, Wout
+  xdist = np.empty((N, F, HO, WO, C, HF, WF))
+  for f in range(F):
+    for i in range(HO):
+      for j in range(WO):
+        xdist[:, f, i, j] = xpad[:, :, i*S:i*S+HF, j*S:j*S+WF]
 
-  # pad x and allocate output
-  x_pad = np.pad(x, ((0, 0), (0, 0), (P, P), (P, P)), 'constant')
-  out = np.empty((N, F, Hout, Wout))
+  xw = np.empty_like(xdist)
+  for f in range(F):
+    xw[:, f, :, :] = xdist[:, f, :, :] * w[f]
 
-  for p in range(N):
-    for f in range (F):
-        for i in range(Hout):
-          for j in range(Wout):
-            out[p, f, i, j] = np.sum(x_pad[p, :, i*S:i*S+HH, j*S:j*S+WW] * w[f]) + b[f]
-            
+  xsum = np.sum(xw, axis=(4, 5, 6))
+
+  out = np.empty_like(xsum)
+  for n in range(N):
+    for f in range(F):
+      out[n, f] = xsum[n, f] + b[f]
+
 
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
-  cache = (x, w, b, conv_param)
+  cache = (x, xdist, w, b, conv_param)
   return out, cache
 
 
@@ -455,19 +458,73 @@ def conv_backward_naive(dout, cache):
   A naive implementation of the backward pass for a convolutional layer.
 
   Inputs:
-  - dout: Upstream derivatives.
+  - dout: Upstream derivatives. (N, F, HO, WO)
   - cache: A tuple of (x, w, b, conv_param) as in conv_forward_naive
 
   Returns a tuple of:
   - dx: Gradient with respect to x
   - dw: Gradient with respect to w
   - db: Gradient with respect to b
+
+  - x: Input data of shape (N, C, H, W)
+  - w: Filter weights of shape (F, C, HH, WW)
+  - b: Biases, of shape (F,)
+  - conv_param: A dictionary with the following keys:
+    - 'stride': The number of pixels between adjacent receptive fields in the
+      horizontal and vertical directions.
+    - 'pad': The number of pixels that will be used to zero-pad the input.
+
   """
-  dx, dw, db = None, None, None
   #############################################################################
   # TODO: Implement the convolutional backward pass.                          #
   #############################################################################
-  pass
+  (x, xdist, w, b, conv_param) = cache
+
+  N, C, HI, WI = x.shape
+  N, F, HO, WO, C, HF, WF = xdist.shape
+  S, P = (conv_param['stride'], conv_param['pad'])
+  HP, WP = HI + 2 * P, WI + 2 * P
+  HO, WO = ((HP - HF)/S + 1, (WP - WF)/S + 1) 
+
+  # back prop to dxsum and db
+  dxsum = dout
+  db = np.sum(dout, axis=(0, 2, 3))
+
+  # back prop sum_filter to dxw
+  dxw = np.empty_like(xdist)
+  for n in range(N):
+    for f in range(F):
+      for i in range(HO):
+        for j in range(WO):
+          dxw[n, f, i, j] = np.ones((C, HF, WF)) * dxsum[n, f, i, j]
+
+
+  # back prop mutliply_w to dxdist and dw
+  dw = np.sum(dxw * xdist, axis=(0, 2, 3))
+  dxdist = np.empty_like(xdist)
+  for i in range(HO):
+    for j in range(WO):
+      dxdist[:, :, i, j] = dxw[:, :, i, j] * w
+        
+        
+  # back prop dist to xpad
+  dxpad = np.zeros((N, C, HP, WP))
+  for n in range(N):
+    for f in range(F):
+      for y_out in range(HO):
+        for x_out in range (WO):
+          # get the upper left filter input coordinates
+          (y_in_ul, x_in_ul) = (y_out * S, x_out * S)
+          for y_filter in range(HF):
+            for x_filter in range(WF):
+              (y_in, x_in) = (y_in_ul + y_filter, x_in_ul + x_filter)
+              #for c in range(C):
+              dxpad[n, :, y_in, x_in] += dxdist[n, f, y_out, x_out, :, y_filter, x_filter]
+
+                        
+  # back prop pad
+  dx = dxpad[:, :, 1:HI + 2 * P - 1, 1:WI + 2 * P - 1]
+
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
