@@ -546,15 +546,41 @@ def max_pool_forward_naive(x, pool_param):
   - out: Output data
   - cache: (x, pool_param)
   """
-  out = None
   #############################################################################
   # TODO: Implement the max pooling forward pass                              #
   #############################################################################
-  pass
+  N, C, H, W = x.shape
+  HP, WP, S = (pool_param['pool_height'], pool_param['pool_width'], pool_param['stride'])
+
+  H_steps = (H - HP) / S + 1
+  W_steps = (W - WP) / S + 1
+
+  out = np.empty((N, C, H_steps, W_steps), dtype=x.dtype)
+  activations = np.empty((N, C, H_steps, W_steps, 2), dtype=np.uint)
+
+  for row in range(H_steps):
+    for col in range(W_steps):
+
+        start_row, start_col = row * S, col * S
+        x_to_pool = x[:, :, start_row: start_row + HP, start_col: start_col + WP]
+  
+        max_width = np.max(x_to_pool, axis=3)
+        args_width = np.argmax(x_to_pool, axis=3)
+        max_height = np.max(max_width, axis=2)
+        args_height = np.argmax(max_width, axis=2)
+        
+        out[:, :, row, col] = max_height
+
+        for p in range(N):
+          for c in range(C):
+            active_row = args_height[p, c]
+            active_col = args_width[p, c, active_row]
+            activations[p, c, row, col] = np.array([active_row, active_col])
+
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
-  cache = (x, pool_param)
+  cache = (x, pool_param, activations)
   return out, cache
 
 
@@ -573,7 +599,22 @@ def max_pool_backward_naive(dout, cache):
   #############################################################################
   # TODO: Implement the max pooling backward pass                             #
   #############################################################################
-  pass
+  (x, pool_param, activations) = cache
+  
+  N, C, H, W = x.shape
+  N, C, HS, WS = dout.shape
+  HP, WP, S = (pool_param['pool_height'], pool_param['pool_width'], pool_param['stride'])
+  
+  dx = np.zeros_like(x)
+  for n in range(N):
+    for c in range(C):
+      for row in range(HS):
+        for col in range(WS):
+          start_row, start_col = row * S, col * S
+          target_row, target_col = np.array([start_row, start_col]) + \
+                                   activations[n, c, row, col]
+          dx[n, c, target_row, target_col] = dout[n, c, row, col]
+  
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
@@ -603,7 +644,7 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
   - cache: Values needed for the backward pass
   """
   out, cache = None, None
-
+  
   #############################################################################
   # TODO: Implement the forward pass for spatial batch normalization.         #
   #                                                                           #
