@@ -183,6 +183,7 @@ def batchnorm_forward(x, gamma, beta, bn_param):
 
     x_hat = x_minus_mean * one_over_sqrt_var
     out = gamma * x_hat + beta
+
     running_mean = momentum * running_mean + (1 - momentum) * mean
     running_var = momentum * running_var + (1 - momentum) * var
 
@@ -676,8 +677,6 @@ def spatial_batchnorm_backward(dout, cache):
   - dgamma: Gradient with respect to scale parameter, of shape (C,)
   - dbeta: Gradient with respect to shift parameter, of shape (C,)
   """
-  dx, dgamma, dbeta = None, None, None
-
   #############################################################################
   # TODO: Implement the backward pass for spatial batch normalization.        #
   #                                                                           #
