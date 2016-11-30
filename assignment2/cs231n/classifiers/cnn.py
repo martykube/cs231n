@@ -9,7 +9,7 @@ class ThreeLayerConvNet(object):
   """
   A three-layer convolutional network with the following architecture:
   
-  conv - relu - 2x2 max pool - affine - relu - affine - softmax
+  (conv - sbn - relu - conv - sbn - relu - 2x2 max pool) - affine - relu - affine - softmax
   
   The network operates on minibatches of data that have shape (N, C, H, W)
   consisting of N images, each with height H and width W and with C input
@@ -49,46 +49,79 @@ class ThreeLayerConvNet(object):
     ############################################################################
 
     # Layer parameters
-    self.conv_param = {'stride': 1, 'pad': (filter_size - 1) / 2}
-    self.pool_param = {'pool_height': 2, 'pool_width': 2, 'stride': 2}
+    conv_params = {'stride': 1, 'pad': (filter_size - 1) / 2}
+    pool_params = {'pool_height': 2, 'pool_width': 2, 'stride': 2}
+    bn_params = {}
 
     # input channels, height, width
     C, H, W = input_dim
-    self.params['W1'] = weight_scale * \
-                        np.random.randn(num_filters, C, filter_size, filter_size)
-    self.params['b1'] = np.zeros(num_filters)
+    F = num_filters
 
-    # convolution layer output size
+    #
+    # first conv => sbn => relu
+    #
+
+    # IN(N, C, H, W) => CONV(N, F, H, W)
     # Use padding at (filter_size -1) / 2 and output dimensions are conserved...
-    # for F filters, output size is
-    # CONV(N, F, H, W) 
-    
+    self.params['W1'] = weight_scale * \
+                        np.random.randn(F, C, filter_size, filter_size)
+    self.params['b1'] = np.zeros(F)
+    self.conv_params_1 = conv_params.copy()
+
     # Spatial batch normalization
     # CONV(N, F, H, W) =>  SBN(N, F, H, W)
-    self.params['gamma1'] = np.ones(num_filters)
-    self.params['beta1'] = np.zeros(num_filters)
-    self.bn_param_1 = {}
+    self.params['gamma1'] = np.ones(F)
+    self.params['beta1'] = np.zeros(F)
+    self.bn_params_1 = bn_params.copy()
 
-    # MAXPOOL(N, F, H, W) => OUT(N, F, HP, WP)
-    # pool_param = {'pool_height': 2, 'pool_width': 2, 'stride': 2}
+    # SBN(N, F, H, W) => RELU(N, F, H, W)
+    
+    #
+    # second conv => sbn => relu
+    #
+
+    # IN(N, F, H, W) => CONV(N, F, H, W)
+    # Use padding at (filter_size -1) / 2 and output dimensions are conserved...
+    self.params['W2'] = weight_scale * \
+                        np.random.randn(F, F, filter_size, filter_size)
+    self.params['b2'] = np.zeros(F)
+    self.conv_params_2 = conv_params.copy()
+
+    # Spatial batch normalization
+    # CONV(N, F, H, W) =>  SBN(N, F, H, W)
+    self.params['gamma2'] = np.ones(F)
+    self.params['beta2'] = np.zeros(F)
+    self.bn_params_2 = bn_params.copy()
+
+    # SBN(N, F, H, W) => RELU(N, F, H, W)
+    
+    # maxpool
+    #
+    # RELU(N, F, H, W) => MAXPOOL(N, F, HP, WP)
+    # pool_params = {'pool_height': 2, 'pool_width': 2, 'stride': 2}
     # (H - F) / S + 1
     HP = (H - 2) / 2 + 1
     WP = (W - 2) / 2 + 1
+    self.pool_params = pool_params.copy()
 
-    # AFFINE(N, F, HP, WP) => OUT(N, NHID)
+    # MAXPOOL(N, F, HP, WP) => AFFINE(N, NHID)
     # W(F * HP * WP, NHID), seems backwards, I know...
     # affine will do the flattening
-    self.params['W2'] = weight_scale * np.random.randn(num_filters * HP * WP, hidden_dim)
-    self.params['b2'] = np.zeros(hidden_dim)
-    self.params['gamma2'] = np.ones(hidden_dim)
-    self.params['beta2'] = np.zeros(hidden_dim)
-    self.bn_param_2 = {}
+    self.params['W3'] = weight_scale * np.random.randn(F * HP * WP, hidden_dim)
+    self.params['b3'] = np.zeros(hidden_dim)
 
+    # batch norm
+    # AFFINE(N, HID) => BN(N, NHID)
+    self.params['gamma3'] = np.ones(hidden_dim)
+    self.params['beta3'] = np.zeros(hidden_dim)
+    self.bn_params_3 = bn_params.copy()
+
+    # BN(N, NHID) => RELU(N, NHID)
 
     # AFFINE(N, HID) => OUT(N, CLASSES)    
     # W(CLASSES, HID), B(CLASSES)
-    self.params['W3'] = weight_scale * np.random.randn(hidden_dim, num_classes)
-    self.params['b3'] = np.zeros(num_classes)
+    self.params['W4'] = weight_scale * np.random.randn(hidden_dim, num_classes)
+    self.params['b4'] = np.zeros(num_classes)
     
     ############################################################################
     #                             END OF YOUR CODE                             #
@@ -107,29 +140,44 @@ class ThreeLayerConvNet(object):
     W1, b1 = self.params['W1'], self.params['b1']
     W2, b2 = self.params['W2'], self.params['b2']
     W3, b3 = self.params['W3'], self.params['b3']
+    W4, b4 = self.params['W4'], self.params['b4']
     gamma1, beta1 = self.params['gamma1'], self.params['beta1']
     gamma2, beta2 = self.params['gamma2'], self.params['beta2']
-    
+    gamma3, beta3 = self.params['gamma3'], self.params['beta3']
+    conv_params_1 = self.conv_params_1
+    conv_params_2 = self.conv_params_2
+    bn_params_1 = self.bn_params_1
+    bn_params_2 = self.bn_params_2
+    bn_params_3 = self.bn_params_3
+    pool_params = self.pool_params
+    reg = self.reg
     ############################################################################
     # TODO: Implement the forward pass for the three-layer convolutional net,  #
     # computing the class scores for X and storing them in the scores          #
     # variable.                                                                #
     ############################################################################
     if y is None:
-      self.bn_param_1['mode'] = 'test'
-      self.bn_param_2['mode'] = 'test'
+      bn_params_1['mode'] = 'test'
+      bn_params_2['mode'] = 'test'
+      bn_params_3['mode'] = 'test'
     else:
-      self.bn_param_1['mode'] = 'train'
-      self.bn_param_2['mode'] = 'train'
+      bn_params_1['mode'] = 'train'
+      bn_params_2['mode'] = 'train'
+      bn_params_3['mode'] = 'train'
 
-    conv_out, conv_cache = conv_relu_pool_forward(
+
+    conv_out_1, conv_cache_1 = conv_sbn_relu_forward(
       X, W1, b1, gamma1, beta1,
-      self.conv_param, self.pool_param, self.bn_param_1)
+      conv_params_1, bn_params_1)
+
+    conv_out_2, conv_cache_2 = conv_sbn_relu_pool_forward(
+      conv_out_1, W2, b2, gamma2, beta2,
+      conv_params_2, bn_params_2, pool_params)
 
     affine_relu_out, affine_relu_cache = affine_relu_forward(
-      conv_out, W2, b2, gamma2, beta2, self.bn_param_2)
+      conv_out_2, W3, b3, gamma3, beta3, bn_params_3)
 
-    affine, affine_cache = affine_forward(affine_relu_out, W3, b3)
+    affine, affine_cache = affine_forward(affine_relu_out, W4, b4)
 
     scores = affine
     ############################################################################
@@ -148,31 +196,39 @@ class ThreeLayerConvNet(object):
     ############################################################################
     data_loss, dscores = softmax_loss(scores, y)
     reg_loss = (
-      0.5 * self.reg * np.sum(self.params['W1'] * self.params['W1']) +
-      0.5 * self.reg * np.sum(self.params['W2'] * self.params['W2']) +
-      0.5 * self.reg * np.sum(self.params['W3'] * self.params['W3'])
+      0.5 * reg * np.sum(W1 * W1) +
+      0.5 * reg * np.sum(W2 * W2) +
+      0.5 * reg * np.sum(W3 * W3) +
+      0.5 * reg * np.sum(W4 * W4)
     )
     loss = data_loss + reg_loss
 
     dx, dw, db = affine_backward(dscores, affine_cache)
-    grads['W3'] = dw
-    grads['b3'] = db
+    grads['W4'] = dw
+    grads['b4'] = db
 
     dx, dw, db, dgamma, dbeta = affine_relu_backward(dx, affine_relu_cache)
+    grads['W3'] = dw
+    grads['b3'] = db
+    grads['gamma3'] = dgamma
+    grads['beta3'] = dbeta
+    
+    dx, dw, db, dgamma, dbeta = conv_sbn_relu_pool_backward(dx, conv_cache_2)
     grads['W2'] = dw
     grads['b2'] = db
     grads['gamma2'] = dgamma
     grads['beta2'] = dbeta
     
-    dx, dw, db, dgamma, dbeta = conv_relu_pool_backward(dx, conv_cache)
+    dx, dw, db, dgamma, dbeta = conv_sbn_relu_backward(dx, conv_cache_1)
     grads['W1'] = dw
     grads['b1'] = db
     grads['gamma1'] = dgamma
     grads['beta1'] = dbeta
     
-    grads['W1'] += self.reg * self.params['W1']
-    grads['W2'] += self.reg * self.params['W2']
-    grads['W3'] += self.reg * self.params['W3']
+    grads['W1'] += reg * W1
+    grads['W2'] += reg * W2
+    grads['W3'] += reg * W3
+    grads['W4'] += reg * W4
 
     ############################################################################
     #                             END OF YOUR CODE                             #
