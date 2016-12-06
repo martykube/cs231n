@@ -139,7 +139,6 @@ def conv_sbn_relu_pool_forward(x, w, b, gamma, beta, conv_param, bn_param, pool_
   sbn, sbn_cache = spatial_batchnorm_forward(conv, gamma, beta, bn_param)
   relu, relu_cache = relu_forward(sbn)
   pool, pool_cache = max_pool_forward_fast(relu, pool_param)
-
   return pool, (conv_cache, sbn_cache, relu_cache, pool_cache)
 
 

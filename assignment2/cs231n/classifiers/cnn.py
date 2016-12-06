@@ -18,7 +18,7 @@ class ThreeLayerConvNet(object):
   
   def __init__(self, input_dim=(3, 32, 32), num_filters=32, filter_size=7,
                hidden_dim=100, num_classes=10, weight_scale=1e-3, reg=0.0,
-               dtype=np.float32):
+               dtype=np.float32, num_conv_layers=1):
     """
     Initialize a new network.
     
@@ -36,7 +36,7 @@ class ThreeLayerConvNet(object):
     self.params = {}
     self.reg = reg
     self.dtype = dtype
-
+    self.num_conv_layers = num_conv_layers
     ############################################################################
     # TODO: Initialize weights and biases for the three-layer convolutional    #
     # network. Weights should be initialized from a Gaussian with standard     #
@@ -53,75 +53,87 @@ class ThreeLayerConvNet(object):
     pool_params = {'pool_height': 2, 'pool_width': 2, 'stride': 2}
     bn_params = {}
 
+    self.conv_params = {}
+    self.pool_params = {}
+    self.bn_params = {}
+
     # input channels, height, width
     C, H, W = input_dim
     F = num_filters
 
-    #
-    # first conv => sbn => relu
-    #
+    # # One or more layers
+    F_IN = C
+    F_OUT = F
+    H_CURR = H
+    W_CURR = W
+    for layer in range(self.num_conv_layers):
+      
+      # first conv => sbn => relu
+ 
+     # IN(N, C, H, W) => CONV(N, F, H, W)
+      # Use padding at (filter_size -1) / 2 and output dimensions are conserved...
+      self.params['W_%d_1' % layer] = weight_scale * \
+                          np.random.randn(F_OUT, F_IN, filter_size, filter_size)
+      self.params['b_%d_1' % layer] = np.zeros(F_OUT)
+      self.conv_params['%d_1' % layer] = conv_params.copy()
+      # first layer C is Channels, after that is Filters
 
-    # IN(N, C, H, W) => CONV(N, F, H, W)
-    # Use padding at (filter_size -1) / 2 and output dimensions are conserved...
-    self.params['W1'] = weight_scale * \
-                        np.random.randn(F, C, filter_size, filter_size)
-    self.params['b1'] = np.zeros(F)
-    self.conv_params_1 = conv_params.copy()
+      # Spatial batch normalization
+      # CONV(N, F, H, W) =>  SBN(N, F, H, W)
+      self.params['gamma_%d_1' % layer] = np.ones(F_OUT)
+      self.params['beta_%d_1' % layer] = np.zeros(F_OUT)
+      self.bn_params['%d_1'  % layer] = bn_params.copy()
 
-    # Spatial batch normalization
-    # CONV(N, F, H, W) =>  SBN(N, F, H, W)
-    self.params['gamma1'] = np.ones(F)
-    self.params['beta1'] = np.zeros(F)
-    self.bn_params_1 = bn_params.copy()
-
-    # SBN(N, F, H, W) => RELU(N, F, H, W)
+      # # SBN(N, F, H, W) => RELU(N, F, H, W)
     
-    #
-    # second conv => sbn => relu
-    #
+      # # second conv => sbn => relu
+ 
+      # # IN(N, F, H, W) => CONV(N, F, H, W)
+      # # Use padding at (filter_size -1) / 2 and output dimensions are conserved...
+      self.params['W_%d_2' % layer] = weight_scale * \
+                                      np.random.randn(F_OUT, F_OUT, filter_size, filter_size)
+      self.params['b_%d_2' % layer] = np.zeros(F_OUT)
+      self.conv_params['%d_2' % layer] = conv_params.copy()
 
-    # IN(N, F, H, W) => CONV(N, F, H, W)
-    # Use padding at (filter_size -1) / 2 and output dimensions are conserved...
-    self.params['W2'] = weight_scale * \
-                        np.random.randn(F, F, filter_size, filter_size)
-    self.params['b2'] = np.zeros(F)
-    self.conv_params_2 = conv_params.copy()
+      # Spatial batch normalization
+      # CONV(N, F, H, W) =>  SBN(N, F, H, W)
+      self.params['gamma_%d_2' % layer] = np.ones(F_OUT)
+      self.params['beta_%d_2' % layer] = np.zeros(F_OUT)
+      self.bn_params['%d_2'  % layer] = bn_params.copy()
 
-    # Spatial batch normalization
-    # CONV(N, F, H, W) =>  SBN(N, F, H, W)
-    self.params['gamma2'] = np.ones(F)
-    self.params['beta2'] = np.zeros(F)
-    self.bn_params_2 = bn_params.copy()
-
-    # SBN(N, F, H, W) => RELU(N, F, H, W)
+      # SBN(N, F, H, W) => RELU(N, F, H, W)
     
-    # maxpool
-    #
-    # RELU(N, F, H, W) => MAXPOOL(N, F, HP, WP)
-    # pool_params = {'pool_height': 2, 'pool_width': 2, 'stride': 2}
-    # (H - F) / S + 1
-    HP = (H - 2) / 2 + 1
-    WP = (W - 2) / 2 + 1
-    self.pool_params = pool_params.copy()
-
+      # maxpool
+      #
+      # RELU(N, F, H, W) => MAXPOOL(N, F, HP, WP)
+      # pool_params = {'pool_height': 2, 'pool_width': 2, 'stride': 2}
+      # (H - F) / S + 1
+      H_CURR = (H_CURR - 2) / 2 + 1
+      W_CURR = (W_CURR - 2) / 2 + 1
+      self.pool_params['%d' % layer] = pool_params.copy()
+      
+      # Update for next layer
+      F_IN = F_OUT
+      
     # MAXPOOL(N, F, HP, WP) => AFFINE(N, NHID)
     # W(F * HP * WP, NHID), seems backwards, I know...
     # affine will do the flattening
-    self.params['W3'] = weight_scale * np.random.randn(F * HP * WP, hidden_dim)
-    self.params['b3'] = np.zeros(hidden_dim)
+    layer = self.num_conv_layers
+    self.params['W_%d'  % layer] = weight_scale * np.random.randn(
+      F * H_CURR * W_CURR, hidden_dim)
+    self.params['b_%d' % layer] = np.zeros(hidden_dim)
+    self.params['gamma_%d' % layer] = np.ones(hidden_dim)
+    self.params['beta_%d' % layer] = np.zeros(hidden_dim)
+    self.bn_params['_%d' % layer] = bn_params.copy()
 
-    # batch norm
-    # AFFINE(N, HID) => BN(N, NHID)
-    self.params['gamma3'] = np.ones(hidden_dim)
-    self.params['beta3'] = np.zeros(hidden_dim)
-    self.bn_params_3 = bn_params.copy()
-
-    # BN(N, NHID) => RELU(N, NHID)
-
-    # AFFINE(N, HID) => OUT(N, CLASSES)    
+    # AFFINE(N, HID) => AFFINE(N, CLASSES)    
     # W(CLASSES, HID), B(CLASSES)
-    self.params['W4'] = weight_scale * np.random.randn(hidden_dim, num_classes)
-    self.params['b4'] = np.zeros(num_classes)
+    layer += 1
+    self.params['W_%d' % layer] = weight_scale * np.random.randn(hidden_dim, num_classes)
+    self.params['b_%d' % layer] = np.zeros(num_classes)
+    self.params['gamma_%d' % layer] = np.ones(num_classes)
+    self.params['beta_%d' % layer] = np.zeros(num_classes)
+    self.bn_params['_%d' % layer] = bn_params.copy()
     
     ############################################################################
     #                             END OF YOUR CODE                             #
@@ -130,26 +142,13 @@ class ThreeLayerConvNet(object):
     for k, v in self.params.iteritems():
       self.params[k] = v.astype(dtype)     
 
- 
+
   def loss(self, X, y=None):
     """
     Evaluate loss and gradient for the three-layer convolutional network.
     
     Input / output: Same API as TwoLayerNet in fc_net.py.
     """
-    W1, b1 = self.params['W1'], self.params['b1']
-    W2, b2 = self.params['W2'], self.params['b2']
-    W3, b3 = self.params['W3'], self.params['b3']
-    W4, b4 = self.params['W4'], self.params['b4']
-    gamma1, beta1 = self.params['gamma1'], self.params['beta1']
-    gamma2, beta2 = self.params['gamma2'], self.params['beta2']
-    gamma3, beta3 = self.params['gamma3'], self.params['beta3']
-    conv_params_1 = self.conv_params_1
-    conv_params_2 = self.conv_params_2
-    bn_params_1 = self.bn_params_1
-    bn_params_2 = self.bn_params_2
-    bn_params_3 = self.bn_params_3
-    pool_params = self.pool_params
     reg = self.reg
     ############################################################################
     # TODO: Implement the forward pass for the three-layer convolutional net,  #
@@ -157,29 +156,55 @@ class ThreeLayerConvNet(object):
     # variable.                                                                #
     ############################################################################
     if y is None:
-      bn_params_1['mode'] = 'test'
-      bn_params_2['mode'] = 'test'
-      bn_params_3['mode'] = 'test'
+      for k, v in self.bn_params.iteritems():
+        self.bn_params[k]['mode'] = 'test'
     else:
-      bn_params_1['mode'] = 'train'
-      bn_params_2['mode'] = 'train'
-      bn_params_3['mode'] = 'train'
+      for k, v in self.bn_params.iteritems():
+        self.bn_params[k]['mode'] = 'train'
 
+    conv_cache = {}
+    for layer in range(self.num_conv_layers):
+      conv_out_1, conv_cache['%d_1' % layer] = conv_sbn_relu_forward(
+        X, 
+        self.params['W_%d_1' % layer], 
+        self.params['b_%d_1' % layer], 
+        self.params['gamma_%d_1' % layer], 
+        self.params['beta_%d_1' % layer],
+        self.conv_params['%d_1' % layer], 
+        self.bn_params['%d_1' % layer])
 
-    conv_out_1, conv_cache_1 = conv_sbn_relu_forward(
-      X, W1, b1, gamma1, beta1,
-      conv_params_1, bn_params_1)
+      conv_out_2, conv_cache['%d_2' % layer] = conv_sbn_relu_pool_forward(
+        conv_out_1,
+        self.params['W_%d_2' % layer], 
+        self.params['b_%d_2' % layer], 
+        self.params['gamma_%d_2' % layer], 
+        self.params['beta_%d_2' % layer],
+        self.conv_params['%d_2' % layer], 
+        self.bn_params['%d_2' % layer],
+        self.pool_params['%d' % layer])
 
-    conv_out_2, conv_cache_2 = conv_sbn_relu_pool_forward(
-      conv_out_1, W2, b2, gamma2, beta2,
-      conv_params_2, bn_params_2, pool_params)
+      X = conv_out_2
 
-    affine_relu_out, affine_relu_cache = affine_relu_forward(
-      conv_out_2, W3, b3, gamma3, beta3, bn_params_3)
+    layer = self.num_conv_layers
+    affine_relu_1, affine_relu_cache_1 = affine_relu_forward(
+      conv_out_2,
+      self.params['W_%d' % layer], 
+      self.params['b_%d' % layer], 
+      self.params['gamma_%d' % layer], 
+      self.params['beta_%d' % layer],
+      self.bn_params['_%d' % layer])
 
-    affine, affine_cache = affine_forward(affine_relu_out, W4, b4)
+    layer += 1
+    affine_relu_2, affine_relu_cache_2 = affine_relu_forward(
+      affine_relu_1,
+      self.params['W_%d' % layer], 
+      self.params['b_%d' % layer], 
+      self.params['gamma_%d' % layer], 
+      self.params['beta_%d' % layer],
+      self.bn_params['_%d' % layer])
 
-    scores = affine
+    # scores = affine
+    scores = affine_relu_2
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -194,41 +219,76 @@ class ThreeLayerConvNet(object):
     # data loss using softmax, and make sure that grads[k] holds the gradients #
     # for self.params[k]. Don't forget to add L2 regularization!               #
     ############################################################################
+    
+    
+#    orig_shape = scores.shape
+#    print "orig_shape", orig_shape
+
+#    scores = scores.reshape((orig_shape[0], -1))
+#    print "scores.shape", scores.shape
+#    print "y.shape", y.shape
+
     data_loss, dscores = softmax_loss(scores, y)
-    reg_loss = (
-      0.5 * reg * np.sum(W1 * W1) +
-      0.5 * reg * np.sum(W2 * W2) +
-      0.5 * reg * np.sum(W3 * W3) +
-      0.5 * reg * np.sum(W4 * W4)
-    )
+
+#    dscores = dscores.reshape(orig_shape)
+#    print dscores.shape
+
+    reg_loss = 0
+    for layer in range(self.num_conv_layers):
+      w1 = self.params['W_%d_1' % layer]
+      reg_loss += np.sum(w1 * w1) 
+      w2 = self.params['W_%d_2' % layer]
+      reg_loss += np.sum(w2 * w2) 
+    layer = self.num_conv_layers
+    reg_loss += np.sum(self.params['W_%d' % layer] * self.params['W_%d' % layer])
+    layer += 1
+    reg_loss += np.sum(self.params['W_%d' % layer] * self.params['W_%d' % layer])
+    reg_loss *= 0.5 * reg
+
     loss = data_loss + reg_loss
 
-    dx, dw, db = affine_backward(dscores, affine_cache)
-    grads['W4'] = dw
-    grads['b4'] = db
+    dx = dscores
 
-    dx, dw, db, dgamma, dbeta = affine_relu_backward(dx, affine_relu_cache)
-    grads['W3'] = dw
-    grads['b3'] = db
-    grads['gamma3'] = dgamma
-    grads['beta3'] = dbeta
+    layer = self.num_conv_layers + 1
+    dx, dw, db, dgamma, dbeta = affine_relu_backward(dscores, affine_relu_cache_2)
+    grads['W_%d' % layer] = dw
+    grads['b_%d' % layer] = db
+    grads['gamma_%d' % layer] = dgamma
+    grads['beta_%d' % layer] = dbeta
+
+    layer -= 1
+    dx, dw, db, dgamma, dbeta = affine_relu_backward(dx, affine_relu_cache_1)
+    grads['W_%d' % layer] = dw
+    grads['b_%d' % layer] = db
+    grads['gamma_%d' % layer] = dgamma
+    grads['beta_%d' % layer] = dbeta
+
+    for layer in reversed(range(self.num_conv_layers)):
     
-    dx, dw, db, dgamma, dbeta = conv_sbn_relu_pool_backward(dx, conv_cache_2)
-    grads['W2'] = dw
-    grads['b2'] = db
-    grads['gamma2'] = dgamma
-    grads['beta2'] = dbeta
+      dx, dw, db, dgamma, dbeta = conv_sbn_relu_pool_backward(dx, conv_cache['%d_2' % layer])
+      grads['W_%d_2' % layer] = dw
+      grads['b_%d_2' % layer] = db
+      grads['gamma_%d_2' % layer] = dgamma
+      grads['beta_%d_2' % layer] = dbeta
     
-    dx, dw, db, dgamma, dbeta = conv_sbn_relu_backward(dx, conv_cache_1)
-    grads['W1'] = dw
-    grads['b1'] = db
-    grads['gamma1'] = dgamma
-    grads['beta1'] = dbeta
-    
-    grads['W1'] += reg * W1
-    grads['W2'] += reg * W2
-    grads['W3'] += reg * W3
-    grads['W4'] += reg * W4
+      dx, dw, db, dgamma, dbeta = conv_sbn_relu_backward(dx, conv_cache['%d_1' % layer])
+      grads['W_%d_1' % layer] = dw
+      grads['b_%d_1' % layer] = db
+      grads['gamma_%d_1' % layer] = dgamma
+      grads['beta_%d_1' % layer] = dbeta
+
+      
+    # regularization contribution to gradient
+    for layer in range(self.num_conv_layers):
+      name = 'W_%d_1' % layer
+      grads[name] += reg * self.params[name]
+      name = 'W_%d_2' % layer
+      grads[name] += reg * self.params[name]
+
+    layer = self.num_conv_layers + 1
+    grads['W_%d' % layer] += reg * self.params['W_%d' % layer]
+    layer -= 1
+    grads['W_%d' % layer] += reg * self.params['W_%d' % layer]
 
     ############################################################################
     #                             END OF YOUR CODE                             #
