@@ -11748,11 +11748,10 @@ div#notebook {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h1 id="Convolution-Neural-Network-Classifier-for-CIFAR-10">Convolution Neural Network Classifier for CIFAR-10<a class="anchor-link" href="#Convolution-Neural-Network-Classifier-for-CIFAR-10">&#182;</a></h1><p>I'm in the middle of training a <a href="https://en.wikipedia.org/wiki/Convolutional_neural_network">Convolution Neural Network</a> (CNN) to the <a href="https://www.cs.toronto.edu/~kriz/cifar.html">CIFAR-10</a> dataset.</p>
+<h1 id="Convolution-Neural-Network-Classifier-for-CIFAR-10">Convolution Neural Network Classifier for CIFAR-10<a class="anchor-link" href="#Convolution-Neural-Network-Classifier-for-CIFAR-10">&#182;</a></h1><p>I used a <a href="https://en.wikipedia.org/wiki/Convolutional_neural_network">Convolution Neural Network</a> (CNN) to the classify the <a href="https://www.cs.toronto.edu/~kriz/cifar.html">CIFAR-10</a> dataset with 75% accuracy.</p>
 <p>CNNs have been applied to image classification and have achived near <a href="http://karpathy.github.io/2014/09/02/what-i-learned-from-competing-against-a-convnet-on-imagenet/">human level accuracy</a>.  The highest accuracy networks are trained against large image sets such as <a href="http://image-net.org/">ImageNet</a> and require a lot computing power to train.  CIFAR-10 is a much smaller dataset and will require less computing power and yet is of reasonable complexity to be non-trival.</p>
 <p>The approach and much of the supporting code comes from Stanford University's <a href="http://cs231n.stanford.edu/">cs231n</a> class.  All of the course materials are available on line and the lectures are avaiable on <a href="https://www.youtube.com/watch?v=g-PvXUjD6qg&amp;list=PLlJy-eBtNFt6EuMxFYRiNRS07MCWN5UIA">youtube</a>.</p>
 <p>The coding for this class is all numpy.  I've writen the code for all of the different types of neural network <a href="https://github.com/martykube/cs231n/blob/master/assignment2/cs231n/layers.py">layers</a> and for <a href="https://github.com/martykube/cs231n/blob/master/assignment1/cs231n/classifiers/neural_net.py">stochastic gradient descent</a>.  This includes forward pass and backpropagation of gradients on the computational graphs.  Much of the supporting code such as gradient testing and image loading was provided in the course materials.  Likewise, many of the code snippets in this notebook come from the class materials.</p>
-<p>I'm currently in the middle of the training.  My results to date show ~70% accuracy.</p>
 <p>Let's start by looking at the CIFAR-10 dataset.</p>
 
 </div>
@@ -17410,7 +17409,101 @@ softmax - Softmax classifier for loss</code></pre>
 <p>And training versus validation accuracy:</p>
 <p><img src="validate.png" alt="validateion error"></p>
 <p>At 4 epocs I saw a lot of overfitting with training accuracy approaching 95%.  For the 10 epoch run the overfitting is less as I increased the regularization.  However, the validation accuracy was not better than 70%.</p>
-<p>Deep neural networks perform better.  I stopped here with the simple 3 layer model and am currently working on a deeper neural network.</p>
+<p>Deep neural networks perform better.  I stopped here with the simple 3 layer model moved to a deeper neural network.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Deeper-network">Deeper network<a class="anchor-link" href="#Deeper-network">&#182;</a></h1><p>The second CNN model allowed for many convolution layers and also had a more convolutions per layer:</p>
+<blockquote><p>(conv - sbn - relu - conv - sbn - relu - 2x2 max pool)XM - affine - bn - relu - affine - softmax</p>
+</blockquote>
+<p>The 2x2 pooling layer reduces the spatial dimension by half.  Our starting dimension is 32x32 and after 4 layers the image extent is 2x2.  So the range of M that I explored was [1-4].</p>
+<p>After developing the code I ran through loss and gradent sanity checks.  I also overfit a small dataset</p>
+<p><img src="m2-overfit.png" alt="loss and accuracy curves for overfitting"></p>
+<p>After a few dozen runs I settled on the following hyperparameters</p>
+<table>
+<thead><tr>
+<th>Paramater</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hiddem Dim</td>
+<td>150</td>
+</tr>
+<tr>
+<td>Regularization</td>
+<td>4.32e-4</td>
+</tr>
+<tr>
+<td>Learning rate</td>
+<td>2.75e-4</td>
+</tr>
+<tr>
+<td>Gradient update</td>
+<td>rmsprop</td>
+</tr>
+<tr>
+<td>filter size</td>
+<td>5x5</td>
+</tr>
+<tr>
+<td>Filter count</td>
+<td>25</td>
+</tr>
+<tr>
+<td>Epochs</td>
+<td>12</td>
+</tr>
+<tr>
+<td>Convolution layers</td>
+<td>3</td>
+</tr>
+</tbody>
+</table>
+<p>The loss and validation curve:</p>
+<p><img src="m2-loss.png" alt="Traning loss">
+<img src="m2-training-validation.png" alt="Training accuracy"></p>
+<p>The models seemed to peak out at around 72% accuracy.  As a final step I trained an ensemble of 5 models with the exact same hypeparaters.  The individual model accurcies were:</p>
+<table>
+<thead><tr>
+<th>Model</th>
+<th>Validation Accuracy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>0.713</td>
+</tr>
+<tr>
+<td>2</td>
+<td>0.686</td>
+</tr>
+<tr>
+<td>3</td>
+<td>0.721</td>
+</tr>
+<tr>
+<td>4</td>
+<td>0.716</td>
+</tr>
+<tr>
+<td>5</td>
+<td>0.722</td>
+</tr>
+</tbody>
+</table>
+<p>Here is a plot of ensemble valdation accuracy versus the number of models</p>
+<p><img src="m2-models.png" alt="Ensemble valdation accuracy"></p>
+<p>From this graph I selected 5 as the number of models to use.</p>
+<p>The final test set accuracy with 5 models was 0.759.</p>
 
 </div>
 </div>
@@ -17420,7 +17513,31 @@ softmax - Softmax classifier for loss</code></pre>
 <div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython2"><pre> 
+<div class=" highlight hl-ipython2"><pre><span class="c"># Hyper parameter selection for ensemble.  </span>
+<span class="c"># Calculates validation accuracy with different number of models in the ensemble.</span>
+
+<span class="n">X</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s">&#39;X_test&#39;</span><span class="p">]</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s">&#39;y_test&#39;</span><span class="p">]</span>
+
+<span class="n">acc</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">num_models</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">):</span>
+
+    <span class="k">print</span> <span class="s">&quot;num_models&quot;</span><span class="p">,</span> <span class="n">num_models</span>
+    <span class="n">y_ens_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">num_models</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_models</span><span class="p">):</span>
+        <span class="n">solver</span> <span class="o">=</span> <span class="n">solvers</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">loss</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+        <span class="n">pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">y_ens_pred</span><span class="p">[:,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">pred</span>
+
+    <span class="n">y_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">y_pred</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+        <span class="n">y_pred</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">y_ens_pred</span><span class="p">[</span><span class="n">i</span><span class="p">]))</span>
+
+    <span class="n">acc</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">y_pred</span> <span class="o">==</span> <span class="n">y</span><span class="p">))</span>
+
+<span class="k">print</span> <span class="n">acc</span>
 </pre></div>
 
 </div>
